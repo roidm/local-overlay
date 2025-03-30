@@ -12,7 +12,7 @@ LICENSE="LGPL-2+"
 SLOT="4"
 KEYWORDS="~alpha ~amd64 ~arm ~arm64 ~loong ~ppc ~ppc64 ~riscv ~sparc ~x86"
 
-IUSE="aqua broadway cloudproviders colord cups examples gstreamer gtk-doc +introspection sysprof test vulkan wayland +X cpu_flags_x86_f16c"
+IUSE="aqua broadway cloudproviders colord cups examples gstreamer +introspection sysprof test vulkan wayland +X cpu_flags_x86_f16c"
 REQUIRED_USE="
 	|| ( aqua wayland X )
 	test? ( introspection )
@@ -20,11 +20,11 @@ REQUIRED_USE="
 
 # TODO: Optional gst build dep on >=gst-plugins-base-1.23.1, so depend on it once we can
 COMMON_DEPEND="
-	>=dev-libs/glib-2.80.0:2
+	>=dev-libs/glib-2.76.0:2
 	>=x11-libs/cairo-1.18.0[aqua?,glib,svg(+),X?]
 	>=x11-libs/pango-1.56.0[introspection?]
 	>=dev-libs/fribidi-1.0.6
-	>=media-libs/harfbuzz-8.4.0:=
+	>=media-libs/harfbuzz-2.6.0:=
 	>=x11-libs/gdk-pixbuf-2.30:2[introspection?]
 	media-libs/libpng:=
 	media-libs/tiff:=
@@ -47,16 +47,16 @@ COMMON_DEPEND="
 		)
 	)
 	introspection? ( >=dev-libs/gobject-introspection-1.76:= )
-	vulkan? ( >=media-libs/vulkan-loader-1.3:=[wayland?,X?] )
+	vulkan? ( >=media-libs/vulkan-loader-1.3:=[wayland?] )
 	wayland? (
-		>=dev-libs/wayland-1.23.0
-		>=dev-libs/wayland-protocols-1.41
+		>=dev-libs/wayland-1.21.0
+		>=dev-libs/wayland-protocols-1.36
 		media-libs/mesa[wayland]
 		>=x11-libs/libxkbcommon-0.2
 	)
 	X? (
 		media-libs/fontconfig
-		media-libs/mesa[X(+)]
+		media-libs/mesa
 		x11-libs/libX11
 		>=x11-libs/libXi-1.8
 		x11-libs/libXext
@@ -91,9 +91,9 @@ BDEPEND="
 			dev-python/pygobject:3[${PYTHON_USEDEP}]
 		')
 	)
+	dev-python/docutils
 	dev-libs/glib
 	>=dev-util/gdbus-codegen-2.48
-	gtk-doc? ( dev-util/gi-docgen )
 	dev-util/glib-utils
 	>=sys-devel/gettext-0.19.7
 	virtual/pkgconfig
@@ -103,7 +103,7 @@ BDEPEND="
 	)
 	test? (
 		dev-libs/glib:2
-		media-fonts/cantarell
+		media-fonts/adwaita
 		wayland? ( dev-libs/weston[headless] )
 	)
 "
@@ -113,7 +113,7 @@ PATCHES=(
 	# with USE="-wayland -X" to trick gtk into claiming that it wasn't built with
 	# such support.
 	# https://bugs.gentoo.org/624960
-	"${FILESDIR}"/"${PN}"-4.18.1-gdk-add-a-poison-macro-to-hide-GDK_WINDOWING_.patch
+	"${FILESDIR}"/"${P}"-gdk-add-a-poison-macro-to-hide-GDK_WINDOWING_.patch
 )
 
 python_check_deps() {
@@ -175,7 +175,7 @@ src_configure() {
 		$(meson_feature introspection)
 
 		# Documentation
-		$(meson_use gtk-doc documentation)
+		-Ddocumentation=false # we ship pregenerated API docs from tarball
 		-Dscreenshots=false
 		-Dman-pages=true
 
@@ -236,10 +236,11 @@ src_test() {
 src_install() {
 	meson_src_install
 
-	if use gtk-doc ; then
-		mkdir -p "${ED}"/usr/share/gtk-doc/html/ || die
-		mv "${ED}"/usr/share/doc/{gtk4,gdk4*,gsk4} "${ED}"/usr/share/gtk-doc/html/ || die
-	fi
+	# TODO: Seems that HTML docs are no longer in the tarball after
+	# upstream switched to CI-generated releases? bug #947514
+	#insinto /usr/share/gtk-doc/html
+	# This will install API docs specific to X11 and wayland regardless of USE flags, but this is intentional
+	#doins -r "${S}"/docs/reference/{gtk/gtk4,gsk/gsk4,gdk/gdk4{,-wayland,-x11}}
 }
 
 pkg_preinst() {
