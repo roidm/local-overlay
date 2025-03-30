@@ -113,7 +113,7 @@ PATCHES=(
 	# with USE="-wayland -X" to trick gtk into claiming that it wasn't built with
 	# such support.
 	# https://bugs.gentoo.org/624960
-	"${FILESDIR}"/"${P}"-gdk-add-a-poison-macro-to-hide-GDK_WINDOWING_.patch
+	"${FILESDIR}"/"${PN}"-4.18.1-gdk-add-a-poison-macro-to-hide-GDK_WINDOWING_.patch
 )
 
 python_check_deps() {
