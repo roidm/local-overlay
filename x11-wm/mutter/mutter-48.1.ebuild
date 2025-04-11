@@ -167,7 +167,7 @@ src_configure() {
 		#gles2_libname
 		-Degl=true
 		-Dglx=true
-                -Dxwayland=false
+                -Dxwayland=true
 		$(meson_use wayland)
 		$(meson_use systemd logind)
 		$(meson_use wayland native_backend)
