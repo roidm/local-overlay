@@ -1,14 +1,15 @@
-# Copyright 1999-2024 Gentoo Authors
+# Copyright 1999-2025 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI="8"
 
-FIREFOX_PATCHSET="firefox-128esr-patches-07.tar.xz"
-SPIDERMONKEY_PATCHSET="spidermonkey-128-patches-02.tar.xz"
+FIREFOX_PATCHSET="firefox-128esr-patches-09.tar.xz"
+SPIDERMONKEY_PATCHSET="spidermonkey-128-patches-03.tar.xz"
 
 LLVM_COMPAT=( 17 18 19 )
+RUST_NEEDS_LLVM=1
 
-PYTHON_COMPAT=( python3_{10..12} )
+PYTHON_COMPAT=( python3_{10..13} )
 PYTHON_REQ_USE="ncurses,ssl,xml(+)"
 
 WANT_AUTOCONF="2.1"
@@ -58,11 +59,11 @@ DESCRIPTION="Mozilla's JavaScript engine written in C and C++"
 HOMEPAGE="https://spidermonkey.dev https://firefox-source-docs.mozilla.org/js/index.html"
 SRC_URI="${MOZ_SRC_BASE_URI}/source/${MOZ_P}.source.tar.xz -> ${MOZ_P_DISTFILES}.source.tar.xz
 	${PATCH_URIS[@]}"
-KEYWORDS="amd64 arm arm64 ~riscv x86"
+KEYWORDS="~amd64 ~arm ~arm64 ~loong ~ppc ~ppc64 ~riscv ~x86"
 
 LICENSE="MPL-2.0"
 SLOT="$(ver_cut 1)"
-IUSE="clang cpu_flags_arm_neon debug +jit lto test"
+IUSE="clang cpu_flags_arm_neon debug +jit test"
 
 #RESTRICT="test"
 RESTRICT="!test? ( test )"
@@ -171,7 +172,22 @@ pkg_pretend() {
 }
 
 pkg_setup() {
+	# Get LTO from environment; export after this phase for use in src_configure (etc)
+	use_lto=no
+
 	if [[ ${MERGE_TYPE} != binary ]] ; then
+		if tc-is-lto; then
+			use_lto=yes
+			# LTO is handled via configure
+			filter-lto
+		fi
+
+		if [[ ${use_lto} = yes ]]; then
+			# -Werror=lto-type-mismatch -Werror=odr are going to fail with GCC,
+			# bmo#1516758, bgo#942288
+			filter-flags -Werror=lto-type-mismatch -Werror=odr
+		fi
+
 		if use test ; then
 			CHECKREQS_DISK_BUILD="4400M"
 		else
@@ -179,31 +195,8 @@ pkg_setup() {
 		fi
 
 		check-reqs_pkg_setup
-
 		llvm-r1_pkg_setup
 		rust_pkg_setup
-
-		if use clang && use lto && tc-ld-is-lld ; then
-			local version_lld=$(ld.lld --version 2>/dev/null | awk '{ print $2 }')
-			[[ -n ${version_lld} ]] && version_lld=$(ver_cut 1 "${version_lld}")
-			[[ -z ${version_lld} ]] && die "Failed to read ld.lld version!"
-
-			local version_llvm_rust=$(rustc -Vv 2>/dev/null | grep -F -- 'LLVM version:' | awk '{ print $3 }')
-			[[ -n ${version_llvm_rust} ]] && version_llvm_rust=$(ver_cut 1 "${version_llvm_rust}")
-			[[ -z ${version_llvm_rust} ]] && die "Failed to read used LLVM version from rustc!"
-
-			if ver_test "${version_lld}" -ne "${version_llvm_rust}" ; then
-				eerror "Rust is using LLVM version ${version_llvm_rust} but ld.lld version belongs to LLVM version ${version_lld}."
-				eerror "You will be unable to link ${CATEGORY}/${PN}. To proceed you have the following options:"
-				eerror "  - Manually switch rust version using 'eselect rust' to match used LLVM version"
-				eerror "  - Switch to dev-lang/rust[system-llvm] which will guarantee matching version"
-				eerror "  - Build ${CATEGORY}/${PN} without USE=lto"
-				eerror "  - Rebuild lld with llvm that was used to build rust (may need to rebuild the whole "
-				eerror "    llvm/clang/lld/rust chain depending on your @world updates)"
-				die "LLVM version used by Rust (${version_llvm_rust}) does not match with ld.lld version (${version_lld})!"
-			fi
-		fi
-
 		python-any-r1_pkg_setup
 
 		# Build system is using /proc/self/oom_score_adj, bug #604394
@@ -218,10 +211,12 @@ pkg_setup() {
 		# Ensure we use C locale when building, bug #746215
 		export LC_ALL=C
 	fi
+
+	export use_lto
 }
 
 src_prepare() {
-	if use lto ; then
+	if [[ ${use_lto} == "yes" ]]; then
 		rm -v "${WORKDIR}"/firefox-patches/*-LTO-Only-enable-LTO-*.patch || die
 	fi
 
@@ -389,7 +384,7 @@ src_configure() {
 	fi
 
 	# Tell build system that we want to use LTO
-	if use lto ; then
+	if [[ ${use_lto} == "yes" ]] ; then
 		if use clang ; then
 			if tc-ld-is-mold ; then
 				mozconfig_add_options_ac '+lto' --enable-linker=mold
@@ -446,6 +441,15 @@ src_test() {
 	fi
 
 	cp "${FILESDIR}"/spidermonkey-${SLOT}-known-test-failures.txt "${T}"/known_test_failures.list || die
+
+	if use ppc ; then
+		echo "non262/extensions/reviver-mutates-holder-object-nonnative.js" >> "${T}"/known_test_failures.list
+		echo "non262/extensions/typedarray-set-detach.js" >> "${T}"/known_test_failures.list
+	fi
+
+	if use ppc64 ; then
+		echo "test262/built-ins/TypedArray/prototype/set/typedarray-arg-set-values-same-buffer-other-type.js" >> "${T}"/known_test_failures.list
+	fi
 
 	if use x86 ; then
 		echo "non262/Intl/DateTimeFormat/timeZone_version.js" >> "${T}"/known_test_failures.list
