@@ -1,4 +1,4 @@
-# Copyright 2021-2024 Gentoo Authors
+# Copyright 2021-2025 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=8
@@ -12,7 +12,7 @@ if [[ ${PV} == "9999" ]]; then
 	inherit git-r3
 	EGIT_REPO_URI="https://git.libcamera.org/libcamera/libcamera.git"
 else
-	SRC_URI="https://github.com/kbingham/libcamera/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz"
+	SRC_URI="https://gitlab.freedesktop.org/camera/libcamera/-/archive/v${PV}/${P}.tar.bz2"
 	KEYWORDS="~amd64 ~x86"
 fi
 
@@ -25,7 +25,7 @@ REQUIRED_USE="qt5? ( tiff )"
 
 DEPEND="
 	dev-libs/libyaml:=
-	dev-python/jinja
+	dev-python/jinja2
 	dev-python/ply
 	dev-python/pyyaml
 	|| (
@@ -65,6 +65,11 @@ RDEPEND="
 #	)
 #"
 
+src_unpack() {
+	default
+	mv libcamera-v0.5.0-058f589ae36170935e537910f2c303b1c3ea03b3 "${P}"
+}
+
 src_configure() {
 	local emesonargs=(
 		# Broken for >=dev-pyhon/sphinx-7
@@ -74,7 +79,7 @@ src_configure() {
 		$(meson_feature gstreamer)
 		$(meson_feature qt5 qcam)
 		$(meson_feature trace tracing)
-		$(meson_use v4l2)
+		$(meson_feature v4l2)
 	)
 
 	meson_src_configure "-Dpipelines=uvcvideo,ipu3"
